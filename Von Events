@@ -1,32 +1,128 @@
-[
-  {
-    "name": "Amsterdam – HQ",
-    "coords": [4.90, 52.37],
-    "type": "been",
-    "date": "Feb 2025"
-  },
-  {
-    "name": "Balen – Zero Press Launch",
-    "coords": [5.17, 51.18],
-    "type": "been",
-    "date": "Oct 2024"
-  },
-  {
-    "name": "Milan – EICMA",
-    "coords": [9.19, 45.47],
-    "type": "been",
-    "date": "Nov 2025"
-  },
-  {
-    "name": "Lisbon – Shoot",
-    "coords": [-9.14, 38.72],
-    "type": "going",
-    "date": "Dec 2025"
-  },
-  {
-    "name": "London – Event",
-    "coords": [-0.12, 51.50],
-    "type": "going",
-    "date": "Jan 2026"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event Admin Panel</title>
+<style>
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  max-width: 480px;
+  margin: 60px auto;
+  color: #111;
+}
+input, select, button {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+#suggestions {
+  list-style:none;
+  margin:4px 0 0;
+  padding:0;
+  border:1px solid #ccc;
+  border-radius:6px;
+  display:none;
+  background:#fff;
+  max-height:150px;
+  overflow:auto;
+}
+#suggestions li {
+  padding:8px 10px;
+  cursor:pointer;
+}
+#suggestions li:hover { background:#f2f2f2; }
+</style>
+</head>
+<body>
+
+<h2>Event Admin Panel</h2>
+<p>Add new events here. Type a city or location — coordinates fill automatically.</p>
+
+<form id="eventForm">
+  <label>Event Name</label>
+  <input name="name" required>
+
+  <label>Location</label>
+  <input id="location" placeholder="Type a city or place" required>
+  <ul id="suggestions"></ul>
+
+  <label>Date</label>
+  <input name="date" required placeholder="e.g. Dec 2025">
+
+  <label>Type</label>
+  <select name="type">
+    <option value="been">Past</option>
+    <option value="going">Upcoming</option>
+  </select>
+
+  <button type="submit" style="background:#000;color:#fff;margin-top:10px;">Add Event</button>
+</form>
+
+<p id="status"></p>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyNh0oVlE4WQvuCipaHFJ6o7yRF4bLZSH1cWlqXJ6-5Kku5vFhgjgyTAQ4hHDoTDuAujw/exec";
+const MAPBOX_TOKEN = "pk.eyJ1Ijoidm9uY29tcGFueS0yNiIsImEiOiJjbWhxbDNyNTQwZDYwMmtzZDNtd29rZGI0In0.l7hnN8N0HzKIAjEq_c1qJg";
+
+let selectedCoords = null;
+const locationInput = document.getElementById("location");
+const suggestions = document.getElementById("suggestions");
+
+locationInput.addEventListener("input", async () => {
+  const query = locationInput.value.trim();
+  if (query.length < 2) { suggestions.style.display = "none"; return; }
+  const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&limit=5`);
+  const data = await res.json();
+  suggestions.innerHTML = "";
+  data.features.forEach(f => {
+    const li = document.createElement("li");
+    li.textContent = f.place_name;
+    li.onclick = () => {
+      locationInput.value = f.place_name;
+      selectedCoords = f.center; // [lng, lat]
+      suggestions.style.display = "none";
+    };
+    suggestions.appendChild(li);
+  });
+  suggestions.style.display = data.features.length ? "block" : "none";
+});
+
+document.addEventListener("click", (e) => {
+  if (!locationInput.contains(e.target) && !suggestions.contains(e.target)) {
+    suggestions.style.display = "none";
   }
-]
+});
+
+document.getElementById("eventForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!selectedCoords) {
+    alert("Please select a location from the suggestions list.");
+    return;
+  }
+  const data = Object.fromEntries(new FormData(e.target).entries());
+  data.lat = selectedCoords[1];
+  data.lng = selectedCoords[0];
+  document.getElementById("status").innerText = "Submitting...";
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: { "Content-Type": "application/json" }
+    });
+    if (res.ok) {
+      document.getElementById("status").innerText = "✅ Event added successfully!";
+      e.target.reset();
+      selectedCoords = null;
+    } else {
+      document.getElementById("status").innerText = "❌ Error saving event.";
+    }
+  } catch (error) {
+    console.error(error);
+    document.getElementById("status").innerText = "⚠️ Connection error.";
+  }
+});
+</script>
+</body>
+</html>
