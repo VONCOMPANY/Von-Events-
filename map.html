@@ -1,0 +1,114 @@
+<div style="display:flex;flex-wrap:wrap;max-width:1200px;margin:40px auto;gap:24px;">
+  <div id="sidebar" style="flex:0 0 320px;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111;padding:16px;background:#fff;border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+    <h3 style="font-size:20px;font-weight:600;margin-bottom:16px;">My Travel & Events Map</h3>
+    <div id="filters" style="display:flex;gap:8px;margin-bottom:24px;">
+      <button data-filter="all" style="all:unset;cursor:pointer;padding:8px 14px;border-radius:8px;background:#000;color:#fff;font-size:14px;">All</button>
+      <button data-filter="been" style="all:unset;cursor:pointer;padding:8px 14px;border-radius:8px;background:#eaeaea;color:#000;font-size:14px;">Past</button>
+      <button data-filter="going" style="all:unset;cursor:pointer;padding:8px 14px;border-radius:8px;background:#eaeaea;color:#000;font-size:14px;">Upcoming</button>
+    </div>
+    <div id="eventList" style="display:flex;flex-direction:column;gap:16px;"></div>
+  </div>
+  <div id="map" style="flex:1 1 700px;min-height:500px;border-radius:20px;overflow:hidden;"></div>
+</div>
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet"/>
+
+<script>
+mapboxgl.accessToken = 'pk.eyJ1Ijoidm9uY29tcGFueS0yNiIsImEiOiJjbWhxbDNyNTQwZDYwMmtzZDNtd29rZGI0In0.l7hnN8N0HzKIAjEq_c1qJg';
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyNh0oVlE4WQvuCipaHFJ6o7yRF4bLZSH1cWlqXJ6-5Kku5vFhgjgyTAQ4hHDoTDuAujw/exec";
+
+const map = new mapboxgl.Map({
+  container: 'map',
+  style: 'mapbox://styles/mapbox/light-v11',
+  center: [0, 25],
+  zoom: 1.4,
+  attributionControl: false
+});
+map.on('style.load', () => map.setFog({}));
+
+let places = [];
+const markers = {};
+
+async function loadEvents() {
+  try {
+    const res = await fetch(SCRIPT_URL);
+    const data = await res.json();
+    places = data.map(p => ({
+      name: p.name,
+      coords: [parseFloat(p.lng), parseFloat(p.lat)],
+      type: p.type,
+      date: p.date
+    }));
+    renderList('all');
+  } catch (err) {
+    console.error('Error loading events:', err);
+  }
+}
+
+function closeAllPopups() {
+  for (const key in markers) markers[key].popup.remove();
+}
+
+function openPopup(name) {
+  const m = markers[name];
+  if (!m) return;
+  closeAllPopups();
+  m.popup.setLngLat(m.coords).addTo(map);
+}
+
+function createMarkers() {
+  for (const name in markers) markers[name].marker.remove();
+  for (const p of places) {
+    const el = document.createElement('div');
+    el.style.width = '14px';
+    el.style.height = '14px';
+    el.style.borderRadius = '50%';
+    el.style.cursor = 'pointer';
+    if (p.type === 'been') el.style.background = '#000';
+    else { el.style.border = '2px solid #000'; el.style.background = '#fff'; }
+    const popup = new mapboxgl.Popup({ offset: 20, closeOnClick: true }).setText(`${p.name} — ${p.date}`);
+    const marker = new mapboxgl.Marker(el).setLngLat(p.coords).addTo(map);
+    marker.getElement().addEventListener('click', () => openPopup(p.name));
+    markers[p.name] = { marker, popup, coords: p.coords };
+  }
+}
+
+const listContainer = document.getElementById('eventList');
+const filters = document.querySelectorAll('#filters button');
+
+function renderList(filterType) {
+  listContainer.innerHTML = '';
+  createMarkers();
+  places.filter(p => filterType === 'all' || p.type === filterType)
+    .forEach(p => {
+      const card = document.createElement('div');
+      card.style.padding = '12px';
+      card.style.border = '1px solid #eaeaea';
+      card.style.borderRadius = '8px';
+      card.style.cursor = 'pointer';
+      card.style.background = '#fff';
+      card.style.transition = 'all 0.2s ease';
+      card.innerHTML = `<div style="font-weight:600;color:#000;">${p.name}</div><div style="font-size:12px;color:#666;margin-top:4px;">${p.date}</div>`;
+      card.addEventListener('mouseenter', () => card.style.background = '#f9f9f9');
+      card.addEventListener('mouseleave', () => card.style.background = '#fff');
+      card.addEventListener('click', () => { map.flyTo({ center: p.coords, zoom: 4, speed: 0.7 }); openPopup(p.name); });
+      listContainer.appendChild(card);
+    });
+  places.forEach(p => {
+    const visible = filterType === 'all' || p.type === filterType;
+    markers[p.name].marker.getElement().style.display = visible ? 'block' : 'none';
+  });
+  closeAllPopups();
+}
+
+filters.forEach(btn => {
+  btn.addEventListener('click', () => {
+    filters.forEach(b => { b.style.background = '#eaeaea'; b.style.color = '#000'; });
+    btn.style.background = '#000'; btn.style.color = '#fff';
+    renderList(btn.dataset.filter);
+  });
+});
+
+loadEvents();
+</script>
